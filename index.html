@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>NIBBLES ∞</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Share Tech Mono','Courier New',monospace; }
+#c { display:block; width:100%; height:100%; }
+
+#hud {
+  position:fixed; top:0; left:0; right:0; z-index:10;
+  display:flex; justify-content:space-between; padding:12px 22px;
+  font-size:clamp(10px,2.2vw,15px); color:#00ffcc; letter-spacing:.14em;
+  text-transform:uppercase; pointer-events:none;
+  background:linear-gradient(to bottom,rgba(0,0,18,.85),transparent);
+  text-shadow:0 0 9px rgba(0,255,204,.4);
+}
+.val { color:#ffdd44; text-shadow:0 0 10px rgba(255,221,68,.5); }
+
+.ov {
+  position:fixed; inset:0; z-index:20;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:radial-gradient(ellipse at 50% 40%,rgba(0,2,28,.96) 0%,rgba(0,0,8,.99) 100%);
+  cursor:pointer;
+}
+.ov.hidden { display:none; }
+.ov-box {
+  border:1px solid rgba(0,255,204,.18); padding:clamp(22px,5vw,42px) clamp(26px,7vw,58px);
+  text-align:center; max-width:520px; width:92%;
+  background:rgba(0,3,20,.82);
+  box-shadow:0 0 80px rgba(0,255,204,.04),inset 0 0 0 1px rgba(0,255,204,.07);
+}
+.ov h1 {
+  font-size:clamp(18px,5.5vw,46px); color:#00ffcc;
+  letter-spacing:.32em; text-transform:uppercase;
+  text-shadow:0 0 22px rgba(0,255,204,.95),0 0 60px rgba(0,255,204,.22);
+  margin-bottom:5px;
+}
+.ov .sub { font-size:clamp(8px,1.5vw,11px); color:rgba(0,255,204,.28); letter-spacing:.26em; margin-bottom:22px; }
+.ov p { font-size:clamp(9px,1.7vw,13px); color:rgba(255,255,255,.52); letter-spacing:.09em; line-height:2.3; text-transform:uppercase; }
+.ov .hint { color:rgba(0,255,204,.28); font-size:clamp(8px,1.4vw,10px); margin-top:10px; }
+.ov .blink { margin-top:22px; color:rgba(0,255,204,.8); animation:bl 1s step-end infinite; }
+.score-big { font-size:clamp(26px,7vw,50px); color:#ffdd44; margin:10px 0; letter-spacing:.18em; text-shadow:0 0 18px rgba(255,221,68,.7); }
+@keyframes bl{0%,100%{opacity:1}50%{opacity:0}}
+
+/* Transition status */
+#tbar { position:fixed; bottom:0; left:0; height:2px; background:linear-gradient(90deg,transparent,#00ffcc,transparent); width:0; pointer-events:none; z-index:15; }
+#tlabel {
+  position:fixed; bottom:10px; left:50%; transform:translateX(-50%);
+  font-size:10px; letter-spacing:.26em; color:rgba(0,255,204,.45); text-transform:uppercase;
+  z-index:15; pointer-events:none; opacity:0; transition:opacity .25s;
+}
+#tlabel.show { opacity:1; }
+
+/* D-Pad */
+#dpad {
+  position:fixed; bottom:16px; right:16px; z-index:15;
+  display:none; grid-template-columns:repeat(3,52px); grid-template-rows:repeat(3,52px); gap:4px;
+}
+@media (hover:none) and (pointer:coarse),(max-width:600px){#dpad{display:grid;}}
+.db {
+  background:rgba(0,255,204,.055); border:1px solid rgba(0,255,204,.14);
+  color:rgba(0,255,204,.7); font-size:20px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:8px; cursor:pointer; user-select:none; -webkit-user-select:none;
+  touch-action:manipulation; transition:background .07s;
+}
+.db:active,.db.lit{background:rgba(0,255,204,.2);}
+.de{background:transparent!important;border-color:transparent!important;pointer-events:none;}
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div>SCR&nbsp;<span class="val" id="h-score">000000</span></div>
+  <div>LVL&nbsp;<span class="val" id="h-level">1</span></div>
+  <div>LIVES&nbsp;<span class="val" id="h-lives">▲ ▲ ▲</span></div>
+</div>
+
+<div id="tbar"></div>
+<div id="tlabel">⟳ REORIENTING PLANE</div>
+
+<div class="ov" id="ov-intro">
+  <div class="ov-box">
+    <h1>NIBBLES∞</h1>
+    <div class="sub">Three-Dimensional Edition</div>
+    <p>Your snake moves on a flat 2D plane</p>
+    <p>Eat a number → the plane rotates in 3D space</p>
+    <p>The camera always faces the plane head-on</p>
+    <p>Your body persists through (x,y,z) coordinates</p>
+    <p style="color:rgba(255,80,40,.7);margin-top:6px">Level 2+: a red enemy ball bounces through<br>3D space — leaving residue at every collision</p>
+    <p class="hint">Arrows/WASD · Q E Z C = diagonals · D-Pad + corners</p>
+    <p class="blink">► PRESS ANY KEY OR TAP TO BEGIN ◄</p>
+  </div>
+</div>
+
+<div class="ov hidden" id="ov-go">
+  <div class="ov-box">
+    <h1 style="color:#ff4455;text-shadow:0 0 22px rgba(255,68,85,.85)">GAME OVER</h1>
+    <div class="sub">Spatial coordinates lost</div>
+    <p>FINAL SCORE</p>
+    <div class="score-big" id="go-score">000000</div>
+    <p>LEVEL REACHED&nbsp;<span style="color:#ffdd44" id="go-level">1</span></p>
+    <p class="blink" style="margin-top:20px">► PRESS ANY KEY OR TAP TO RETRY ◄</p>
+  </div>
+</div>
+
+<div id="dpad">
+  <div class="db" id="dp-ul">↖</div><div class="db" id="dp-up">▲</div><div class="db" id="dp-ur">↗</div>
+  <div class="db" id="dp-left">◄</div><div class="db de"></div><div class="db" id="dp-right">►</div>
+  <div class="db" id="dp-dl">↙</div><div class="db" id="dp-down">▼</div><div class="db" id="dp-dr">↘</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════
+// CORE DESIGN
+// ═══════════════════════════════════════════════════
+// The snake lives on a 2D grid (N×N cells) that is a PLANE in 3D space.
+// The plane is defined by: planeOrigin (3D point), planeU (screen-right axis),
+// planeV (screen-up axis), planeNormal = cross(planeU, planeV) (into-screen).
+//
+// The camera ALWAYS sits at: planeOrigin + planeNormal * CAM_DIST
+// looking at planeOrigin, with camera.up = planeV.
+// → The player always sees a perfect face-on 2D view. No distortion.
+//
+// Controls: right = +planeU = gx+1, left = -planeU = gx−1,
+//           up = +planeV = gy+1, down = -planeV = gy−1.
+// This mapping is TRIVIAL and PERMANENT — no axis remapping ever needed.
+//
+// When food is eaten: a new random plane is chosen, planeOrigin = snake head,
+// the head is at grid-center on the new plane, food is placed at a random new
+// grid cell. Camera smoothly transitions. Body stays in 3D world-space.
+// ═══════════════════════════════════════════════════
+
+const N            = 19;
+const HALF         = (N-1)/2;        // = 9
+const CAM_DUR      = 0.38;           // seconds for camera transition (fast!)
+const POOL         = 400;
+const BOX          = HALF + 0.5;     // enemy bounding box half-extent = 9.5 (relative to planeOrigin)
+const RESIDUE_POOL = 350;            // max residue spheres
+const ENEMY_SPD_FRAC = 0.88;         // enemy speed as fraction of snake's current step-rate
+const R_HIT        = 0.52;           // enemy→residue collision radius
+const S_HIT        = 0.50;           // enemy→snake segment collision radius
+const HEAD_R_HIT   = 0.46;           // snake head→residue death radius
+
+// Dynamic camera distance — guarantees full grid visibility at any aspect ratio
+function computeCamDist() {
+  const vfov = camera.fov * Math.PI / 180;
+  const hfov = 2 * Math.atan(Math.tan(vfov/2) * camera.aspect);
+  const minHalfAngle = Math.min(vfov, hfov) / 2;
+  const gridHalf = HALF + 0.5; // = 9.5 world units
+  return (gridHalf / Math.tan(minHalfAngle)) * 1.22; // 22% padding
+}
+
+// ─── RENDERER ───
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x000008);
+const scene  = new THREE.Scene();
+scene.fog    = new THREE.FogExp2(0x000010, 0.009);
+const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, 0.1, 500);
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  // Re-snap camera distance to match new aspect ratio (keeps full grid visible)
+  if (gstate !== 'intro' && !isTransitioning) snapCameraToPlane();
+});
+
+// ─── LIGHTS ───
+scene.add(new THREE.AmbientLight(0x060d1a, 1.8));
+const headLight = new THREE.PointLight(0x00ffcc, 5, 18);
+const foodLight = new THREE.PointLight(0xffcc00, 3.5, 14);
+scene.add(headLight, foodLight);
+const fill = new THREE.DirectionalLight(0x1a3355, 0.6);
+fill.position.set(1,2,2); scene.add(fill);
+
+// ─── STARS ───
+{
+  const n=3200, p=new Float32Array(n*3);
+  for(let i=0;i<n*3;i++) p[i]=(Math.random()-.5)*700;
+  const sg=new THREE.BufferGeometry();
+  sg.setAttribute('position',new THREE.BufferAttribute(p,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:.45,transparent:true,opacity:.45})));
+}
+
+// ─── PLANE STATE ───
+let planeOrigin = new THREE.Vector3(0,0,0);
+let planeU      = new THREE.Vector3(1,0,0);   // screen right
+let planeV      = new THREE.Vector3(0,1,0);   // screen up
+let planeNormal = new THREE.Vector3(0,0,1);   // into screen
+
+// Grid cell (gx,gy) → 3D world position on current plane
+function g2w(gx, gy) {
+  return new THREE.Vector3()
+    .addScaledVector(planeU, gx - HALF)
+    .addScaledVector(planeV, gy - HALF)
+    .add(planeOrigin);
+}
+
+// ─── GRID VISUALIZATION ───
+const gridGroup = new THREE.Group();
+scene.add(gridGroup);
+
+function rebuildGrid() {
+  // Dispose old geometry
+  gridGroup.children.slice().forEach(c => { c.geometry?.dispose(); gridGroup.remove(c); });
+
+  const ext = HALF + 0.5; // half-extent to cell borders = 9.5
+  const pts = [];
+
+  // Horizontal cell borders (lines spanning U at each V step)
+  for (let i=0; i<=N; i++) {
+    const vo = i - HALF - 0.5;
+    pts.push(
+      planeOrigin.clone().addScaledVector(planeU,-ext).addScaledVector(planeV,vo),
+      planeOrigin.clone().addScaledVector(planeU, ext).addScaledVector(planeV,vo)
+    );
+  }
+  // Vertical cell borders (lines spanning V at each U step)
+  for (let i=0; i<=N; i++) {
+    const uo = i - HALF - 0.5;
+    pts.push(
+      planeOrigin.clone().addScaledVector(planeU,uo).addScaledVector(planeV,-ext),
+      planeOrigin.clone().addScaledVector(planeU,uo).addScaledVector(planeV, ext)
+    );
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  gridGroup.add(new THREE.LineSegments(geo,
+    new THREE.LineBasicMaterial({color:0x001133,transparent:true,opacity:.55})));
+
+  // Bright outer border
+  const corners = [
+    planeOrigin.clone().addScaledVector(planeU,-ext).addScaledVector(planeV,-ext),
+    planeOrigin.clone().addScaledVector(planeU, ext).addScaledVector(planeV,-ext),
+    planeOrigin.clone().addScaledVector(planeU, ext).addScaledVector(planeV, ext),
+    planeOrigin.clone().addScaledVector(planeU,-ext).addScaledVector(planeV, ext),
+  ];
+  const bpts = [corners[0],corners[1], corners[1],corners[2], corners[2],corners[3], corners[3],corners[0]];
+  const bgeo = new THREE.BufferGeometry().setFromPoints(bpts);
+  gridGroup.add(new THREE.LineSegments(bgeo,
+    new THREE.LineBasicMaterial({color:0x0055bb,transparent:true,opacity:.9})));
+
+  // Center crosshair (faint)
+  const chpts = [
+    planeOrigin.clone().addScaledVector(planeU,-ext),
+    planeOrigin.clone().addScaledVector(planeU, ext),
+    planeOrigin.clone().addScaledVector(planeV,-ext),
+    planeOrigin.clone().addScaledVector(planeV, ext),
+  ];
+  const chgeo = new THREE.BufferGeometry().setFromPoints(chpts);
+  gridGroup.add(new THREE.LineSegments(chgeo,
+    new THREE.LineBasicMaterial({color:0x003366,transparent:true,opacity:.35})));
+}
+
+// ─── SNAKE MESH POOL ───
+const segGeo = new THREE.SphereGeometry(0.34, 10, 10);
+const cylGeo = new THREE.CylinderGeometry(0.14, 0.14, 1, 8);
+const segPool = [], cylPool = [];
+
+for (let i=0; i<POOL; i++) {
+  const mat = new THREE.MeshPhongMaterial({
+    color:    i===0 ? 0xffffff : 0x00bb88,
+    emissive: i===0 ? 0x00ddcc : 0x002211,
+    emissiveIntensity: i===0 ? 1.3 : 0.3,
+    shininess: i===0 ? 500 : 100,
+  });
+  const seg = new THREE.Mesh(segGeo, mat); seg.visible=false; scene.add(seg); segPool.push(seg);
+
+  const cyl = new THREE.Mesh(cylGeo, new THREE.MeshPhongMaterial({color:0x008866,emissive:0x001a0d,shininess:55}));
+  cyl.visible=false; scene.add(cyl); cylPool.push(cyl);
+}
+
+// ─── ENEMY BALL ───
+const enemyMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.26, 12, 12),
+  new THREE.MeshPhongMaterial({color:0xff3300, emissive:0xff2200, emissiveIntensity:2.0, shininess:600})
+);
+enemyMesh.visible = false;
+scene.add(enemyMesh);
+const enemyGlowMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.52, 8, 8),
+  new THREE.MeshBasicMaterial({color:0xff4400, transparent:true, opacity:0.12,
+    blending:THREE.AdditiveBlending, side:THREE.BackSide, depthWrite:false})
+);
+enemyGlowMesh.visible = false;
+scene.add(enemyGlowMesh);
+const enemyLight = new THREE.PointLight(0xff3300, 4.5, 10);
+enemyLight.visible = false;
+scene.add(enemyLight);
+
+// Velocity trail: 6 ghost spheres fading behind the enemy
+const trailGeo   = new THREE.SphereGeometry(0.14, 6, 6);
+const trailMeshes = [];
+for (let i=0;i<6;i++){
+  const tm = new THREE.Mesh(trailGeo,
+    new THREE.MeshBasicMaterial({color:0xff2200,transparent:true,opacity:(6-i)/6*0.35,
+      blending:THREE.AdditiveBlending,depthWrite:false}));
+  tm.visible=false; scene.add(tm); trailMeshes.push(tm);
+}
+const trailHistory = []; // ring-buffer of recent positions
+
+// ─── RESIDUE POOL ───
+const residueGeo = new THREE.SphereGeometry(0.17, 6, 6);
+const residuePool = [];
+for (let i=0;i<RESIDUE_POOL;i++){
+  const rm = new THREE.Mesh(residueGeo,
+    new THREE.MeshPhongMaterial({color:0xff5500, emissive:0x661100,
+      emissiveIntensity:0.7, transparent:true, opacity:0.82, shininess:60}));
+  rm.visible=false; scene.add(rm); residuePool.push(rm);
+}
+
+const _vup = new THREE.Vector3(0,1,0);
+const _qt  = new THREE.Quaternion();
+
+function refreshSnake(hide=false) {
+  const len = snake.length;
+  for (let i=0; i<POOL; i++) {
+    if (!hide && i<len) {
+      segPool[i].position.copy(snake[i]);
+      segPool[i].visible = true;
+      if (i===0) {
+        segPool[i].material.color.setHex(0xffffff);
+        segPool[i].material.emissive.setHex(0x00ddcc);
+        segPool[i].material.emissiveIntensity = 1.3;
+        segPool[i].material.shininess = 500;
+      } else {
+        const t = 1 - i/Math.max(len,1);
+        segPool[i].material.color.setRGB(0, t*.8+.1, t*.55+.18);
+        segPool[i].material.emissive.setHex(0x002211);
+        segPool[i].material.emissiveIntensity = .1 + t*.22;
+        segPool[i].material.shininess = 80;
+      }
+    } else { segPool[i].visible = false; }
+
+    if (!hide && i < len-1) {
+      const a=snake[i], b=snake[i+1];
+      const diff = new THREE.Vector3().subVectors(b,a);
+      const dl = diff.length();
+      if (dl < 0.001) { cylPool[i].visible=false; continue; }
+      cylPool[i].position.copy(a).add(b).multiplyScalar(.5);
+      cylPool[i].scale.y = dl * .85;
+      _qt.setFromUnitVectors(_vup, diff.normalize());
+      cylPool[i].quaternion.copy(_qt);
+      cylPool[i].visible = true;
+    } else { cylPool[i].visible = false; }
+  }
+  if (snake.length>0) headLight.position.copy(snake[0]);
+}
+
+// ─── FOOD ───
+const foodGroup = new THREE.Group(); scene.add(foodGroup);
+const foodInner = new THREE.Mesh(
+  new THREE.SphereGeometry(.38,12,12),
+  new THREE.MeshPhongMaterial({color:0xffdd44,emissive:0xaa5500,emissiveIntensity:.85,shininess:300})
+);
+foodGroup.add(foodInner);
+const foodGlowMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(.72,8,8),
+  new THREE.MeshBasicMaterial({color:0xffcc22,transparent:true,opacity:.08,
+    blending:THREE.AdditiveBlending,side:THREE.BackSide,depthWrite:false})
+);
+foodGroup.add(foodGlowMesh);
+
+let foodSprite = null;
+function makeFoodSprite(num) {
+  if (foodSprite) { foodGroup.remove(foodSprite); foodSprite.material.map?.dispose(); foodSprite=null; }
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const cx=cv.getContext('2d');
+  cx.shadowColor='#ff9900'; cx.shadowBlur=22;
+  cx.fillStyle='#ffee66';
+  cx.font='bold 88px "Share Tech Mono",monospace';
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText(String(num),64,68);
+  foodSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(cv), transparent:true, depthTest:false
+  }));
+  foodSprite.scale.setScalar(1.55);
+  foodGroup.add(foodSprite);
+}
+
+// foodGX/foodGY are the grid coordinates of food on the current plane.
+// Collision check: headGX===foodGX && headGY===foodGY — exact, guaranteed.
+let foodGX=0, foodGY=0;
+
+function placeFood() {
+  // Inner margin: keep food 2 cells away from border so it's always clearly visible
+  const MARGIN = 2;
+  const lo = MARGIN, hi = N - 1 - MARGIN;
+
+  const blocked = new Uint8Array(N*N);
+  blocked[HALF * N + HALF] = 1;
+  for (const seg of snake) {
+    const rel = seg.clone().sub(planeOrigin);
+    const gu = Math.round(rel.dot(planeU) + HALF);
+    const gv = Math.round(rel.dot(planeV) + HALF);
+    if (gu>=0 && gu<N && gv>=0 && gv<N) blocked[gv*N+gu] = 1;
+  }
+
+  let fx=lo, fy=lo, attempts=0;
+  do {
+    fx = lo + Math.floor(Math.random()*(hi-lo+1));
+    fy = lo + Math.floor(Math.random()*(hi-lo+1));
+  } while (blocked[fy*N+fx] && ++attempts<2000);
+
+  foodGX=fx; foodGY=fy;
+  foodGroup.position.copy(g2w(fx,fy));
+  foodLight.position.copy(foodGroup.position);
+}
+
+// ─── CAMERA SYSTEM ───
+// Camera faces the plane EXACTLY: pos = planeOrigin + planeNormal * CAM_DIST
+// up = planeV, lookAt = planeOrigin
+// → planeU is pixel-perfect screen-right, planeV is pixel-perfect screen-up.
+
+let camStartPos  = new THREE.Vector3();
+let camStartQuat = new THREE.Quaternion();
+let camTgtPos    = new THREE.Vector3();
+let camTgtQuat   = new THREE.Quaternion();
+let camT         = 1;
+let camT0        = 0;
+let isTransitioning = false;
+
+function camQuatForPlane(origin, normal, up) {
+  const dist = computeCamDist();
+  const pos = origin.clone().addScaledVector(normal, dist);
+  const m = new THREE.Matrix4().lookAt(pos, origin, up);
+  return { pos, quat: new THREE.Quaternion().setFromRotationMatrix(m) };
+}
+
+function snapCameraToPlane() {
+  const { pos, quat } = camQuatForPlane(planeOrigin, planeNormal, planeV);
+  camera.position.copy(pos);
+  camera.quaternion.copy(quat);
+  camera.up.copy(planeV);
+  camera.updateMatrixWorld(true);
+}
+
+function beginCameraTransition() {
+  camStartPos.copy(camera.position);
+  camStartQuat.copy(camera.quaternion);
+  const { pos, quat } = camQuatForPlane(planeOrigin, planeNormal, planeV);
+  camTgtPos.copy(pos);
+  camTgtQuat.copy(quat);
+  camT = 0; camT0 = performance.now(); isTransitioning = true;
+
+  document.getElementById('tlabel').classList.add('show');
+  document.getElementById('tbar').style.width='0%';
+}
+
+function tickCamera(now) {
+  if (!isTransitioning) return;
+  const raw = Math.min(1, (now-camT0)/(CAM_DUR*1000));
+  const et  = raw*raw*(3-2*raw); // smoothstep
+  camera.position.lerpVectors(camStartPos, camTgtPos, et);
+  camera.quaternion.copy(camStartQuat).slerp(camTgtQuat, et);
+  camera.up.copy(planeV);
+  document.getElementById('tbar').style.width=(raw*100)+'%';
+  if (raw>=1) {
+    isTransitioning=false;
+    camera.position.copy(camTgtPos);
+    camera.quaternion.copy(camTgtQuat);
+    document.getElementById('tlabel').classList.remove('show');
+    document.getElementById('tbar').style.width='0%';
+    onTransitionComplete();
+  }
+}
+
+// ─── RANDOM PLANE ───
+function randomPlane() {
+  // Pick a random normal that differs meaningfully from current
+  let n, attempts=0;
+  do {
+    n = new THREE.Vector3(Math.random()*2-1, Math.random()*2-1, Math.random()*2-1).normalize();
+  } while (Math.abs(n.dot(planeNormal))>0.75 && ++attempts<30);
+
+  // Build right-handed orthonormal basis (n, u, v) where cross(u,v)=n
+  const arb = Math.abs(n.y)<0.85 ? new THREE.Vector3(0,1,0) : new THREE.Vector3(1,0,0);
+  const u = new THREE.Vector3().crossVectors(arb, n).normalize();
+  const v = new THREE.Vector3().crossVectors(n, u).normalize();
+
+  // Bias v upward so "up on screen" stays close to world up
+  if (v.y < 0) { u.negate(); v.negate(); }
+
+  return { n, u, v };
+}
+
+// ─── GAME STATE ───
+let snake=[]; // array of THREE.Vector3 (world positions, all previous planes included)
+let headGX=HALF, headGY=HALF;
+let dir={gx:1,gy:0}, nextDir={gx:1,gy:0};
+let pendingDir = null;
+let score=0, level=1, lives=3, foodNum=1, speed=220;
+let gstate='intro'; // intro | playing | transition | dead | gameover
+let gameInterval=null;
+let isDying=false;
+let foodPulse=0, lastTime=performance.now();
+
+// ─── ENEMY STATE ───
+// Enemy lives in (u,v) plane-space coordinates, not 3D world-space.
+// eu/ev are offsets from planeOrigin along planeU/planeV (range ±BOX).
+// World position = planeOrigin + planeU*eu + planeV*ev.
+// When the plane rotates, eu/ev are unchanged — the ball stays at the same
+// relative position on the new plane. Residues are frozen in 3D world-space.
+const enemy = {
+  eu: 0, ev: 0,       // position in plane-space
+  vu: 0, vv: 0,       // velocity in plane-space (units/sec)
+  active: false,
+  hitCooldown: 0,     // prevents death re-trigger after snake-head hit
+  bounceCooldown: 0,  // blocks ALL collision responses after any bounce (prevents freeze loops)
+};
+let residues   = [];  // [{pos:Vector3, idx:number}]
+let residueHead = 0;  // circular index into residuePool
+
+function updateHUD() {
+  document.getElementById('h-score').textContent = String(score).padStart(6,'0');
+  document.getElementById('h-level').textContent = level;
+  document.getElementById('h-lives').textContent = Array(Math.max(0,lives)).fill('▲').join(' ')||'—';
+}
+
+// ─── ENEMY FUNCTIONS ───
+function resetResidues() {
+  for (const r of residues) residuePool[r.idx].visible = false;
+  residues = [];
+  residueHead = 0;
+}
+
+function addResidue(pos) {
+  const idx = residueHead % RESIDUE_POOL;
+  residueHead++;
+  residuePool[idx].position.copy(pos);
+  residuePool[idx].visible = true;
+  // Update or push into residues array
+  const existing = residues.find(r=>r.idx===idx);
+  if (existing) { existing.pos.copy(pos); }
+  else { residues.push({pos: pos.clone(), idx}); }
+}
+
+function initEnemy() {
+  if (level < 2) {
+    enemy.active=false;
+    enemyMesh.visible=false; enemyGlowMesh.visible=false; enemyLight.visible=false;
+    trailMeshes.forEach(t=>t.visible=false);
+    return;
+  }
+
+  // Spawn at a random (u,v) position inside the grid, away from the snake head
+  const headRel = snake[0].clone().sub(planeOrigin);
+  const headU   = headRel.dot(planeU), headV = headRel.dot(planeV);
+  let eu, ev, tries=0;
+  const inner = BOX * 0.8;
+  do {
+    eu = (Math.random()-.5) * inner * 2;
+    ev = (Math.random()-.5) * inner * 2;
+  } while (Math.hypot(eu-headU, ev-headV) < 5 && ++tries < 100);
+  enemy.eu=eu; enemy.ev=ev;
+
+  // Diagonal velocity: always non-zero on both u and v axes
+  const spd   = (1000 / speed) * ENEMY_SPD_FRAC;
+  const angle = Math.PI/4 + Math.floor(Math.random()*4)*(Math.PI/2) + (Math.random()-.5)*0.4;
+  enemy.vu = Math.cos(angle) * spd;
+  enemy.vv = Math.sin(angle) * spd;
+  enemy.active=true; enemy.hitCooldown=0; enemy.bounceCooldown=0;
+  trailHistory.length=0;
+  enemyMesh.visible=true; enemyGlowMesh.visible=true; enemyLight.visible=true;
+}
+
+// Compute enemy world position from current plane state + stored (eu, ev)
+function enemyWorld() {
+  return new THREE.Vector3()
+    .copy(planeOrigin)
+    .addScaledVector(planeU, enemy.eu)
+    .addScaledVector(planeV, enemy.ev);
+}
+
+function updateEnemy(dt) {
+  if (!enemy.active || gstate==='intro' || gstate==='gameover') return;
+  if (enemy.hitCooldown   > 0) enemy.hitCooldown   -= dt;
+  if (enemy.bounceCooldown > 0) enemy.bounceCooldown -= dt;
+
+  // Keep speed in sync with snake's current tick rate
+  const targetSpd = (1000 / speed) * ENEMY_SPD_FRAC;
+  const curSpd    = Math.hypot(enemy.vu, enemy.vv);
+  if (Math.abs(curSpd - targetSpd) > 0.1 && curSpd > 0.001) {
+    const s = targetSpd / curSpd;
+    enemy.vu *= s; enemy.vv *= s;
+  }
+
+  // Move in (u,v) plane-space
+  enemy.eu += enemy.vu * dt;
+  enemy.ev += enemy.vv * dt;
+
+  // ── Collision gating ──
+  // bounceCooldown prevents ALL bounce responses for 0.32s after any collision.
+  // This is the core fix for the freeze loop: after any bounce a new residue is
+  // deposited near the ball; without immunity the ball would immediately re-collide
+  // with that fresh residue on the next frame and lock in place.
+  if (enemy.bounceCooldown <= 0) {
+
+    // ── Wall bounces ──
+    let wallBounce = false;
+    if (enemy.eu < -BOX) { enemy.eu = -BOX; enemy.vu =  Math.abs(enemy.vu); wallBounce=true; }
+    if (enemy.eu >  BOX) { enemy.eu =  BOX; enemy.vu = -Math.abs(enemy.vu); wallBounce=true; }
+    if (enemy.ev < -BOX) { enemy.ev = -BOX; enemy.vv =  Math.abs(enemy.vv); wallBounce=true; }
+    if (enemy.ev >  BOX) { enemy.ev =  BOX; enemy.vv = -Math.abs(enemy.vv); wallBounce=true; }
+    if (wallBounce) {
+      addResidue(enemyWorld());
+      enemy.bounceCooldown = 0.32;
+    }
+
+    // ── Residue bounces (skip if wall just fired) ──
+    if (!wallBounce) {
+      const wp = enemyWorld();
+      for (let i = residues.length - 1; i >= 0; i--) {
+        const r = residues[i];
+        if (wp.distanceTo(r.pos) < R_HIT) {
+          const rel = r.pos.clone().sub(planeOrigin);
+          const ru  = rel.dot(planeU), rv = rel.dot(planeV);
+          let nu = enemy.eu - ru, nv = enemy.ev - rv;
+          const nl = Math.hypot(nu, nv);
+          if (nl < 0.001) { nu = Math.random()-.5; nv = Math.random()-.5; }
+          else { nu /= nl; nv /= nl; }
+          const dot = enemy.vu*nu + enemy.vv*nv;
+          enemy.vu -= 2*dot*nu;
+          enemy.vv -= 2*dot*nv;
+          enemy.eu = ru + nu*(R_HIT + 0.15);
+          enemy.ev = rv + nv*(R_HIT + 0.15);
+          addResidue(enemyWorld());
+          enemy.bounceCooldown = 0.32;
+          break;
+        }
+      }
+    }
+
+    // ── Snake collision ──
+    const wp2 = enemyWorld();
+    for (let i = 0; i < snake.length; i++) {
+      if (wp2.distanceTo(snake[i]) < S_HIT) {
+        const rel = snake[i].clone().sub(planeOrigin);
+        const su  = rel.dot(planeU), sv = rel.dot(planeV);
+        let nu = enemy.eu - su, nv = enemy.ev - sv;
+        const nl = Math.hypot(nu, nv);
+        if (nl < 0.001) { nu = Math.random()-.5; nv = Math.random()-.5; }
+        else { nu /= nl; nv /= nl; }
+        const dot = enemy.vu*nu + enemy.vv*nv;
+        enemy.vu -= 2*dot*nu;
+        enemy.vv -= 2*dot*nv;
+        enemy.eu += nu*(S_HIT + 0.15);
+        enemy.ev += nv*(S_HIT + 0.15);
+        addResidue(enemyWorld());
+        enemy.bounceCooldown = 0.32;
+        if (enemy.hitCooldown <= 0) {
+          enemy.hitCooldown = 0.45;
+          if (i === 0 && !isDying && gstate === 'playing') die();
+        }
+        break;
+      }
+    }
+
+    // ── Food collision ──
+    if (gstate === 'playing') {
+      const fw = g2w(foodGX, foodGY);
+      if (enemyWorld().distanceTo(fw) < 0.70) {
+        foodNum = Math.max(1, foodNum - 1);
+        makeFoodSprite(foodNum);
+        placeFood();
+        enemy.bounceCooldown = 0.32;
+      }
+    }
+  }
+
+  // ── Trail ──
+  const wp = enemyWorld();
+  trailHistory.push(wp.clone());
+  if (trailHistory.length > 18) trailHistory.shift();
+  for (let i = 0; i < trailMeshes.length; i++) {
+    const hi = trailHistory.length - 1 - (i*3 + 3);
+    if (hi >= 0) { trailMeshes[i].position.copy(trailHistory[hi]); trailMeshes[i].visible = true; }
+    else         { trailMeshes[i].visible = false; }
+  }
+
+  enemyMesh.position.copy(wp);
+  enemyGlowMesh.position.copy(wp);
+  enemyLight.position.copy(wp);
+}
+
+function initGame() {
+  score=0; level=1; lives=3; foodNum=1; isDying=false; pendingDir=null;
+  resetResidues();
+  // Reset to clean XY plane
+  planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
+  snake = [g2w(HALF,HALF), g2w(HALF-1,HALF), g2w(HALF-2,HALF)];
+  headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0};
+  speed=220;
+  placeFood(); makeFoodSprite(foodNum);
+  rebuildGrid();
+  snapCameraToPlane();
+  updateHUD();
+  gstate='playing';
+  clearInterval(gameInterval);
+  gameInterval=setInterval(tick,speed);
+  refreshSnake();
+  initEnemy();
+}
+
+function tick() {
+  if (gstate!=='playing') return;
+  dir={...nextDir};
+  const nGX=headGX+dir.gx, nGY=headGY+dir.gy;
+
+  // Wall collision
+  if (nGX<0||nGX>=N||nGY<0||nGY>=N) { die(); return; }
+
+  const nWorld = g2w(nGX, nGY);
+
+  // Residue collision — snake HEAD enters a residue blob → die
+  for (const r of residues) {
+    if (nWorld.distanceTo(r.pos) < HEAD_R_HIT) { die(); return; }
+  }
+
+  // Enemy ball collision — snake HEAD steps into enemy → die
+  if (enemy.active && nWorld.distanceTo(enemyWorld()) < S_HIT + 0.1) { die(); return; }
+
+  // Self collision — compare 3D world positions (works across all old planes)
+  for (let i=0; i<snake.length-1; i++) {
+    if (snake[i].distanceTo(nWorld)<0.1) { die(); return; }
+  }
+
+  headGX=nGX; headGY=nGY;
+  snake.unshift(nWorld.clone());
+
+  // Food collision — exact grid match (food is always on current plane)
+  if (nGX===foodGX && nGY===foodGY) {
+    const n=foodNum;
+    score+=n*10*level;
+    // Grow aggressively: base foodNum * 4 extra segments, minimum 6
+    const growBy = Math.max(6, n * 4);
+    for (let i=0; i<growBy; i++) snake.push(snake[snake.length-1].clone());
+    // Speed ramp: get faster each food eaten
+    speed = Math.max(55, speed - 6);
+    clearInterval(gameInterval);
+    gameInterval = setInterval(tick, speed);
+    foodNum = foodNum>=9 ? 1 : foodNum+1;
+    if (foodNum===1) { levelUp(); return; }
+    doChangePlane();
+  } else {
+    snake.pop();
+  }
+
+  updateHUD();
+  refreshSnake();
+}
+
+function doChangePlane() {
+  gstate='transition';
+  clearInterval(gameInterval);
+  pendingDir=null;
+
+  // Save current movement direction in world space (to preserve momentum)
+  const movWorld = planeU.clone().multiplyScalar(dir.gx).addScaledVector(planeV,dir.gy);
+
+  // New plane centered on snake head
+  const { n:newN, u:newU, v:newV } = randomPlane();
+  planeOrigin.copy(snake[0]);
+  planeU.copy(newU); planeV.copy(newV); planeNormal.copy(newN);
+  headGX=HALF; headGY=HALF;
+
+  // Project old movement direction onto new plane → choose closest new axis
+  const proj = movWorld.clone().addScaledVector(newN, -movWorld.dot(newN));
+  let newDir = {gx:1,gy:0};
+  if (proj.length()>0.001) {
+    proj.normalize();
+    const opts=[
+      {s:proj.dot(newU),          d:{gx:1,gy:0}},
+      {s:proj.dot(newU.clone().negate()),d:{gx:-1,gy:0}},
+      {s:proj.dot(newV),          d:{gx:0,gy:1}},
+      {s:proj.dot(newV.clone().negate()),d:{gx:0,gy:-1}},
+    ];
+    opts.sort((a,b)=>b.s-a.s);
+    newDir=opts[0].d;
+  }
+  dir=newDir; nextDir=newDir;
+
+  placeFood(); makeFoodSprite(foodNum);
+  rebuildGrid();
+  beginCameraTransition();
+  refreshSnake();
+}
+
+function onTransitionComplete() {
+  if (pendingDir) { nextDir=pendingDir; pendingDir=null; }
+  gstate='playing';
+  clearInterval(gameInterval);
+  gameInterval=setInterval(tick,speed);
+}
+
+function die() {
+  if (isDying) return; isDying=true;
+  gstate='dead'; clearInterval(gameInterval);
+  let fl=0;
+  const fi=setInterval(()=>{
+    fl++; refreshSnake(fl%2===0);
+    if (fl>=8) {
+      clearInterval(fi); lives--; isDying=false; updateHUD();
+      if (lives<=0) { showGO(); return; }
+      // Respawn: reset snake on current plane, keep plane orientation + residues
+      headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0}; pendingDir=null;
+      snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
+      placeFood();
+      gstate='playing'; clearInterval(gameInterval); gameInterval=setInterval(tick,speed);
+      refreshSnake();
+      initEnemy(); // respawn enemy away from new snake position
+    }
+  },130);
+}
+
+function levelUp() {
+  gstate='dead'; clearInterval(gameInterval);
+  level++; score+=level*100; updateHUD();
+  setTimeout(()=>{
+    resetResidues();
+    planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
+    snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
+    headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0}; pendingDir=null;
+    foodNum=1; speed=Math.max(70,220-(level-1)*20);
+    placeFood(); makeFoodSprite(foodNum);
+    rebuildGrid(); snapCameraToPlane();
+    gstate='playing'; clearInterval(gameInterval); gameInterval=setInterval(tick,speed);
+    refreshSnake();
+    initEnemy();
+  },1000);
+}
+
+function showGO() {
+  gstate='gameover';
+  document.getElementById('go-score').textContent=String(score).padStart(6,'0');
+  document.getElementById('go-level').textContent=level;
+  document.getElementById('ov-go').classList.remove('hidden');
+}
+
+// ─── INPUT ───
+// Controls are ALWAYS: right=gx+1, left=gx−1, up=gy+1, down=gy−1
+// + 4 diagonals. Camera always faces plane face-on so this never changes.
+function handleDir(gx, gy) {
+  if (gstate==='intro') { beginGame(); return; }
+  if (gstate==='gameover') { retryGame(); return; }
+  if (gstate==='dead') return;
+  // No exact U-turn (works for both cardinal and diagonal)
+  if (gx===-dir.gx && gy===-dir.gy) return;
+  const d={gx,gy};
+  if (gstate==='transition') pendingDir=d;
+  else nextDir=d;
+}
+
+const KEY_MAP = {
+  ArrowRight:{gx:1,gy:0}, ArrowLeft:{gx:-1,gy:0},
+  ArrowUp:{gx:0,gy:1},    ArrowDown:{gx:0,gy:-1},
+  d:{gx:1,gy:0},  a:{gx:-1,gy:0},  w:{gx:0,gy:1},  s:{gx:0,gy:-1},
+  D:{gx:1,gy:0},  A:{gx:-1,gy:0},  W:{gx:0,gy:1},  S:{gx:0,gy:-1},
+  // Diagonals: Q/E/Z/C and numpad
+  e:{gx:1,gy:1},   q:{gx:-1,gy:1},  c:{gx:1,gy:-1},  z:{gx:-1,gy:-1},
+  E:{gx:1,gy:1},   Q:{gx:-1,gy:1},  C:{gx:1,gy:-1},  Z:{gx:-1,gy:-1},
+};
+document.addEventListener('keydown',e=>{
+  const d=KEY_MAP[e.key];
+  if(d){e.preventDefault();handleDir(d.gx,d.gy);}
+  else if(gstate==='intro') beginGame();
+  else if(gstate==='gameover') retryGame();
+});
+
+// All 8 d-pad buttons: cardinal + diagonal corners
+[
+  ['dp-up',   0, 1],['dp-down',  0,-1],['dp-left', -1, 0],['dp-right', 1, 0],
+  ['dp-ul',  -1, 1],['dp-ur',    1, 1],['dp-dl',  -1,-1],['dp-dr',    1,-1],
+].forEach(([id,gx,gy])=>{
+  const btn=document.getElementById(id);
+  if(!btn) return;
+  const fn=e=>{e.preventDefault();btn.classList.add('lit');setTimeout(()=>btn.classList.remove('lit'),120);handleDir(gx,gy);};
+  btn.addEventListener('touchstart',fn,{passive:false});
+  btn.addEventListener('mousedown',fn);
+});
+
+let tx=0,ty=0;
+canvas.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+canvas.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+  const adx=Math.abs(dx), ady=Math.abs(dy);
+  if(adx<14&&ady<14){
+    if(gstate==='intro') beginGame();
+    else if(gstate==='gameover') retryGame();
+    return;
+  }
+  // Diagonal if both axes are within 2.5× of each other
+  const ratio=adx>0?ady/adx:99;
+  if(ratio>0.4&&ratio<2.5){
+    handleDir(dx>0?1:-1, dy>0?-1:1); // screen y inverts game y
+  } else if(adx>ady){
+    handleDir(dx>0?1:-1,0);
+  } else {
+    handleDir(0,dy>0?-1:1);
+  }
+},{passive:true});
+
+document.getElementById('ov-intro').addEventListener('click',beginGame);
+document.getElementById('ov-go').addEventListener('click',retryGame);
+
+function beginGame(){document.getElementById('ov-intro').classList.add('hidden');initGame();}
+function retryGame(){document.getElementById('ov-go').classList.add('hidden');initGame();}
+
+// ─── RENDER LOOP ───
+function animate() {
+  requestAnimationFrame(animate);
+  const now=performance.now();
+  const dt=Math.min((now-lastTime)/1000,.08);
+  lastTime=now;
+
+  // Camera transition
+  tickCamera(now);
+
+  // Enemy + residues
+  updateEnemy(dt);
+
+  // Food pulse
+  foodPulse+=dt*2.2;
+  foodGroup.scale.setScalar(1+.08*Math.sin(foodPulse));
+  foodGlowMesh.material.opacity=.06+.05*Math.sin(foodPulse*1.4);
+  // Food sprite always faces camera
+  if(foodSprite) foodSprite.quaternion.copy(camera.quaternion);
+
+  renderer.render(scene,camera);
+}
+
+// ─── INTRO SETUP ───
+// Show a preview snake and food so the 3D isn't blank on load
+planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
+snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF),g2w(HALF-2,HALF-1),g2w(HALF-2,HALF-2)];
+headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0};
+foodGX=HALF+4; foodGY=HALF+3;
+foodGroup.position.copy(g2w(foodGX,foodGY)); foodLight.position.copy(foodGroup.position);
+makeFoodSprite(1); rebuildGrid(); snapCameraToPlane(); refreshSnake(); updateHUD();
+
+animate();
+</script>
+</body>
+</html>
