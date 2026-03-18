@@ -562,6 +562,7 @@ let headGX=HALF, headGY=HALF;
 let dir={gx:1,gy:0}, nextDir={gx:1,gy:0};
 let pendingDir = null;
 let score=0, level=1, lives=3, foodNum=1, speed=220;
+let rotatedFoods = new Set(); // tracks which rotation-trigger foods (3,5,7) have fired this level
 let gstate='intro'; // intro | playing | transition | dead | gameover
 let gameInterval=null;
 let isDying=false;
@@ -778,7 +779,7 @@ function updateEnemy(dt) {
 
 function initGame() {
   paused=false; document.getElementById('pause-ov').classList.add('hidden');
-  score=0; level=1; lives=3; foodNum=1; isDying=false; pendingDir=null;
+  score=0; level=1; lives=3; foodNum=1; isDying=false; pendingDir=null; rotatedFoods=new Set();
   resetResidues();
   // Reset to clean XY plane
   planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
@@ -835,7 +836,13 @@ function tick() {
     gameInterval = setInterval(tick, speed);
     foodNum = foodNum>=9 ? 1 : foodNum+1;
     if (foodNum===1) { levelUp(); return; }
-    doChangePlane();
+    if ([3,5,7].includes(n) && !rotatedFoods.has(n)) {
+      rotatedFoods.add(n);
+      doChangePlane();
+    } else {
+      placeFood();
+      makeFoodSprite(foodNum);
+    }
   } else {
     snake.pop();
   }
@@ -918,7 +925,7 @@ function levelUp() {
     planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
     snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
     headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0}; pendingDir=null;
-    foodNum=1; speed=Math.max(70,220-(level-1)*20);
+    foodNum=1; speed=Math.max(70,220-(level-1)*20); rotatedFoods=new Set();
     placeFood(); makeFoodSprite(foodNum);
     rebuildGrid(); snapCameraToPlane();
     gstate='playing'; clearInterval(gameInterval); gameInterval=setInterval(tick,speed);

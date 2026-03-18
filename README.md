@@ -1,6 +1,6 @@
 # Nibbles∞
 
-A 3D reimagining of the classic Nibbles/Snake genre. Your snake moves on a flat 2D grid — but that grid is a **plane in 3D space**. Every time you eat a number, the plane rotates to a new random orientation and the camera reorients to face it head-on. Your snake's body persists in full (x, y, z) world coordinates across every previous orientation, coiling through space as you progress.
+A 3D reimagining of the classic Nibbles/Snake genre. Your snake moves on a flat 2D grid — but that grid is a **plane in 3D space**. Collecting food numbers 3, 5, and 7 rotates the plane to a new random orientation and reorients the camera to face it head-on. Your snake's body persists in full (x, y, z) world coordinates across every previous orientation, coiling through space as you progress.
 
 Single file. No build step. No framework. Runs in any modern browser.
 
@@ -16,7 +16,7 @@ Open `nibbles3d.html` directly in a browser. No server required.
 
 ## How to Play
 
-Eat the numbered food items in sequence (1 through 9). Each number you eat grows your snake and rotates the play plane to a new orientation in 3D space. Complete a full 1→9 cycle to advance to the next level.
+Eat the numbered food items in sequence (1 through 9). Each number you eat grows your snake and increases your speed. Collecting **3**, **5**, or **7** also rotates the play plane to a new orientation in 3D space — once per number per level. Complete a full 1→9 cycle to advance to the next level.
 
 | Goal | Action |
 |------|--------|
@@ -56,7 +56,7 @@ Eat the numbered food items in sequence (1 through 9). Each number you eat grows
 
 The snake always moves on a flat N×N grid. That grid is defined in 3D space by three orthonormal vectors: `planeU` (screen-right), `planeV` (screen-up), and `planeNormal` (toward the camera). The camera always sits directly in front of the plane — `planeOrigin + planeNormal × distance` — so the view is always a clean, undistorted face-on 2D projection. Controls never need remapping: right is always right, up is always up.
 
-When food is eaten, the plane rotates to a new random orientation centered on the snake's current head position. The camera smoothly transitions to the new face-on position. The snake's body, frozen in world space at its prior coordinates, becomes visible as a 3D trail threading through the void.
+When food **3**, **5**, or **7** is eaten for the first time in a level, the plane rotates to a new random orientation centered on the snake's current head position. The camera smoothly transitions to the new face-on position. The snake's body, frozen in world space at its prior coordinates, becomes visible as a 3D trail threading through the void. Each rotation number fires only once per level — if the enemy decrements food back to a previously collected trigger value, eating it again does not rotate the plane.
 
 ### Scoring
 

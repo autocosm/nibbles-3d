@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Nibbles ∞** is a single-file browser game (`nibbles3d.html`) — a 3D reimagining of the classic Nibbles/Snake genre. The snake moves on a 2D grid that is itself a *plane in 3D space*. Each time the player eats a number, the plane rotates to a new random orientation in 3D and the camera reorients to face it head-on. The snake's body persists in full (x, y, z) world coordinates across all previous plane orientations. From level 2 onward, an enemy ball bounces continuously within the play plane, depositing hazard residues on impact.
+**Nibbles ∞** is a single-file browser game (`nibbles3d.html`) — a 3D reimagining of the classic Nibbles/Snake genre. The snake moves on a 2D grid that is itself a *plane in 3D space*. Collecting food numbers **3**, **5**, and **7** (once each per level) rotates the plane to a new random orientation in 3D and reorients the camera to face it head-on. The snake's body persists in full (x, y, z) world coordinates across all previous plane orientations. From level 2 onward, an enemy ball bounces continuously within the play plane, depositing hazard residues on impact.
 
 There are no build tools, no bundler, no dependencies beyond Three.js (r128, loaded from CDN). The entire game — HTML, CSS, JS — lives in a single file.
 
@@ -46,7 +46,7 @@ new THREE.Vector3()
   .add(planeOrigin)
 ```
 
-When the plane rotates, `planeOrigin` is set to the snake's current head position. The head is immediately placed at grid center `(HALF, HALF)`. The body retains its prior world-space positions and is never remapped. The enemy ball's `(eu, ev)` coordinates are also preserved unchanged — it reappears at the same relative position on the new plane.
+When the plane rotates (on first collection of food 3, 5, or 7 per level), `planeOrigin` is set to the snake's current head position. The head is immediately placed at grid center `(HALF, HALF)`. The body retains its prior world-space positions and is never remapped. The enemy ball's `(eu, ev)` coordinates are also preserved unchanged — it reappears at the same relative position on the new plane.
 
 ### Camera Distance
 
@@ -133,6 +133,8 @@ Each food pickup grows the snake by `Math.max(6, foodNum × 4)` segments (eating
 ### Plane Rotation
 
 `randomPlane()` generates a new orthonormal basis `(n, u, v)` differing from the current normal by at least 25° (`|dot| < 0.75`). `v` is biased upward (`v.y >= 0`) to prevent disorienting upside-down flips.
+
+`doChangePlane()` is called only when the player collects food number **3**, **5**, or **7** — and only on the **first** collection of each within a level. This is tracked via `rotatedFoods` (a `Set`), reset to empty in `initGame()` and `levelUp()`. For all other food numbers, `placeFood()` and `makeFoodSprite()` are called directly in `tick()` without triggering a transition. If the enemy decrements food back to a trigger value that has already been rotated, eating it again skips the rotation.
 
 ### Food Placement
 
