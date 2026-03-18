@@ -79,6 +79,8 @@ The binding FOV axis (vertical on landscape, horizontal on portrait) is detected
 - **`'dead'`** — death flash animation; tick stopped; enemy paused
 - **`'gameover'`** — overlay shown; everything stopped
 
+**`paused` flag** — orthogonal to `gstate`. When `true` (only possible during `'playing'` or `'transition'`): `gameInterval` is cleared, `updateEnemy()` and `tickCamera()` return early, and movement key events are dropped. Toggled by `togglePause()` (Space); reset to `false` by `initGame()` and `quitToIntro()`.
+
 ---
 
 ## Key Constants
@@ -223,6 +225,14 @@ The food number is rendered to a `128×128` `<canvas>` and uploaded as a `THREE.
 
 Rebuilt via `rebuildGrid()` on every plane rotation. Three `LineSegments` objects: faint inner cell grid, bright outer border (`0x0055bb`), and a faint center crosshair. All attached to `gridGroup`, which is fully cleared (with geometry disposal) before each rebuild.
 
+### VFX Ring Bursts
+
+`spawnRingBurst(pos, normal, color, count, dur, endScale)` emits `count` expanding `RingGeometry` meshes from a pool of 30 pre-allocated instances (`_vfxPool`). Each ring is oriented to face `normal` via `Quaternion.setFromUnitVectors`, staggered 60ms apart, and driven by `_vfxActive` tweens updated in `updateVFX(now)` each rAF. Opacity follows `0.85 × (1 − t²)`; scale lerps from `startScale` to `endScale`. Active meshes are tracked in `_vfxBusy` (a `Set`) to prevent double-allocation.
+
+Triggered at:
+- **Snake head death** (`die()`): white (`0xffffff`), 3 rings, 450ms, maxScale 4.5 — fires before the flash animation
+- **Enemy captures food** (`updateEnemy()`): orange-red (`0xff4400`), 3 rings, 500ms, maxScale 4.0 — fires at the food's world position
+
 ### Enemy Visuals
 
 Three objects track `enemyWorld()` each frame: `enemyMesh` (solid red sphere), `enemyGlowMesh` (additive backface sphere), `enemyLight` (point light). Six trail spheres (`trailMeshes`) sample `trailHistory` at intervals of 3 frames, fading from `0.35` to near-zero opacity.
@@ -231,17 +241,30 @@ Three objects track `enemyWorld()` each frame: `enemyMesh` (solid red sphere), `
 
 ## Controls
 
+### Movement
+
+Keyboard uses two maps checked in order per `keydown`. Arrow/WASD/Q/E/Z/C are looked up by `e.key` in `KEY_MAP`. Numpad keys are looked up by `e.code` in `NUMPAD_MAP` — `e.code` is used so they work regardless of NumLock state.
+
 | Input | Direction |
 |-------|-----------|
-| `→` / `D` | `+gx` |
-| `←` / `A` | `−gx` |
-| `↑` / `W` | `+gy` |
-| `↓` / `S` | `−gy` |
-| `E` / d-pad ↗ | `+gx, +gy` |
-| `Q` / d-pad ↖ | `−gx, +gy` |
-| `C` / d-pad ↘ | `+gx, −gy` |
-| `Z` / d-pad ↙ | `−gx, −gy` |
+| `→` / `D` / Numpad `6` | `+gx` |
+| `←` / `A` / Numpad `4` | `−gx` |
+| `↑` / `W` / Numpad `8` | `+gy` |
+| `↓` / `S` / Numpad `2` | `−gy` |
+| `E` / Numpad `9` / d-pad ↗ | `+gx, +gy` |
+| `Q` / Numpad `7` / d-pad ↖ | `−gx, +gy` |
+| `C` / Numpad `3` / d-pad ↘ | `+gx, −gy` |
+| `Z` / Numpad `1` / d-pad ↙ | `−gx, −gy` |
 | Swipe | Cardinal or diagonal (diagonal when `0.4 < |dy/dx| < 2.5`) |
+
+### Game Controls
+
+| Key | Action |
+|-----|--------|
+| `Space` | Pause / unpause (`togglePause()`). Clears `gameInterval` on pause; restarts it on unpause if `gstate === 'playing'`. Also starts/retries from overlay screens. |
+| `Esc` | Quit to intro (`quitToIntro()`). Stops the interval, hides all overlays, shows `ov-intro`, sets `gstate = 'intro'`. No-op while already on intro. |
+
+Movement keys are ignored while `paused === true`. `paused` is reset to `false` on every `initGame()` call.
 
 D-pad shown via `(hover: none) and (pointer: coarse)` and `max-width: 600px`.
 

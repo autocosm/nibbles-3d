@@ -26,18 +26,25 @@ Eat the numbered food items in sequence (1 through 9). Each number you eat grows
 
 ### Controls
 
-**Keyboard**
+**Keyboard — movement**
 
 | Key | Direction |
 |-----|-----------|
-| `→` / `D` | Right |
-| `←` / `A` | Left |
-| `↑` / `W` | Up |
-| `↓` / `S` | Down |
-| `E` | Diagonal ↗ |
-| `Q` | Diagonal ↖ |
-| `C` | Diagonal ↘ |
-| `Z` | Diagonal ↙ |
+| `→` / `D` / Numpad `6` | Right |
+| `←` / `A` / Numpad `4` | Left |
+| `↑` / `W` / Numpad `8` | Up |
+| `↓` / `S` / Numpad `2` | Down |
+| `E` / Numpad `9` | Diagonal ↗ |
+| `Q` / Numpad `7` | Diagonal ↖ |
+| `C` / Numpad `3` | Diagonal ↘ |
+| `Z` / Numpad `1` | Diagonal ↙ |
+
+**Keyboard — game controls**
+
+| Key | Action |
+|-----|--------|
+| `Space` | Pause / unpause |
+| `Esc` | Quit to main menu |
 
 **Mobile** — On-screen 8-direction D-pad (shown automatically on touch devices). Swipe gestures also work on the game canvas; diagonal swipes register when neither axis dominates.
 

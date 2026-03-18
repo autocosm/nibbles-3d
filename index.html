@@ -318,6 +318,58 @@ for (let i=0;i<6;i++){
 }
 const trailHistory = []; // ring-buffer of recent positions
 
+// ─── VFX: EXPANDING RING BURSTS ───
+// Reusable pool of RingGeometry meshes driven by a simple tween list.
+const _vfxRingGeo = new THREE.RingGeometry(0.12, 0.34, 28);
+const _vfxPool    = [];
+const _vfxBusy    = new Set();
+const _vfxActive  = []; // {mesh, t0, dur, ss, es}
+const VFX_POOL_SZ = 30;
+for (let i = 0; i < VFX_POOL_SZ; i++) {
+  const m = new THREE.Mesh(_vfxRingGeo,
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+  m.visible = false; scene.add(m); _vfxPool.push(m);
+}
+
+const _vfxUp = new THREE.Vector3(0, 0, 1);
+function spawnRingBurst(pos, normal, color, count, dur, endScale) {
+  const quat = new THREE.Quaternion().setFromUnitVectors(_vfxUp, normal.clone().normalize());
+  let n = 0;
+  for (let i = 0; i < _vfxPool.length && n < count; i++) {
+    const m = _vfxPool[i];
+    if (_vfxBusy.has(m)) continue;
+    _vfxBusy.add(m);
+    const ss = 0.4 + n * 0.35;
+    m.position.copy(pos);
+    m.quaternion.copy(quat);
+    m.scale.setScalar(ss);
+    m.material.color.setHex(color);
+    m.material.opacity = 0;
+    m.visible = true;
+    _vfxActive.push({ mesh: m, t0: performance.now() + n * 60, dur: dur * 1000, ss, es: endScale + n * 1.0 });
+    n++;
+  }
+}
+
+function updateVFX(now) {
+  for (let i = _vfxActive.length - 1; i >= 0; i--) {
+    const e = _vfxActive[i];
+    const elapsed = now - e.t0;
+    if (elapsed < 0) continue;
+    const t = Math.min(1, elapsed / e.dur);
+    e.mesh.scale.setScalar(e.ss + (e.es - e.ss) * t);
+    e.mesh.material.opacity = 0.85 * (1 - t * t);
+    if (t >= 1) {
+      e.mesh.visible = false;
+      _vfxBusy.delete(e.mesh);
+      _vfxActive.splice(i, 1);
+    }
+  }
+}
+
 // ─── RESIDUE POOL ───
 const residueGeo = new THREE.SphereGeometry(0.17, 6, 6);
 const residuePool = [];
@@ -679,6 +731,8 @@ function updateEnemy(dt) {
     if (gstate === 'playing') {
       const fw = g2w(foodGX, foodGY);
       if (enemyWorld().distanceTo(fw) < 0.70) {
+        // Penalty burst at the captured food location
+        spawnRingBurst(fw, planeNormal, 0xff4400, 3, 0.5, 4.0);
         foodNum = Math.max(1, foodNum - 1);
         makeFoodSprite(foodNum);
         placeFood();
@@ -815,6 +869,8 @@ function onTransitionComplete() {
 
 function die() {
   if (isDying) return; isDying=true;
+  // Impact burst at snake head before flashing
+  if (snake.length > 0) spawnRingBurst(snake[0], planeNormal, 0xffffff, 3, 0.45, 4.5);
   gstate='dead'; clearInterval(gameInterval);
   let fl=0;
   const fi=setInterval(()=>{
@@ -983,6 +1039,9 @@ function animate() {
 
   // Enemy + residues
   updateEnemy(dt);
+
+  // VFX ring bursts
+  updateVFX(now);
 
   // Food pulse
   foodPulse+=dt*2.2;
