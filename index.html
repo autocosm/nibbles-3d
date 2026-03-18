@@ -94,7 +94,7 @@ html,body { width:100%; height:100%; overflow:hidden; background:#000; font-fami
     <p>The camera always faces the plane head-on</p>
     <p>Your body persists through (x,y,z) coordinates</p>
     <p style="color:rgba(255,80,40,.7);margin-top:6px">Level 2+: a red enemy ball bounces through<br>3D space — leaving residue at every collision</p>
-    <p class="hint">Arrows/WASD · Q E Z C = diagonals · D-Pad + corners</p>
+    <p class="hint">Arrows/WASD/Numpad · Q E Z C = diagonals · D-Pad + corners · Space = pause · Esc = quit</p>
     <p class="blink">► PRESS ANY KEY OR TAP TO BEGIN ◄</p>
   </div>
 </div>
@@ -107,6 +107,13 @@ html,body { width:100%; height:100%; overflow:hidden; background:#000; font-fami
     <div class="score-big" id="go-score">000000</div>
     <p>LEVEL REACHED&nbsp;<span style="color:#ffdd44" id="go-level">1</span></p>
     <p class="blink" style="margin-top:20px">► PRESS ANY KEY OR TAP TO RETRY ◄</p>
+  </div>
+</div>
+
+<div class="ov hidden" id="pause-ov">
+  <div class="ov-box">
+    <h1>PAUSED</h1>
+    <p class="blink" style="margin-top:16px">► PRESS SPACE TO RESUME ◄</p>
   </div>
 </div>
 
@@ -460,7 +467,7 @@ function beginCameraTransition() {
 }
 
 function tickCamera(now) {
-  if (!isTransitioning) return;
+  if (!isTransitioning || paused) return;
   const raw = Math.min(1, (now-camT0)/(CAM_DUR*1000));
   const et  = raw*raw*(3-2*raw); // smoothstep
   camera.position.lerpVectors(camStartPos, camTgtPos, et);
@@ -585,7 +592,7 @@ function enemyWorld() {
 }
 
 function updateEnemy(dt) {
-  if (!enemy.active || gstate==='intro' || gstate==='gameover') return;
+  if (!enemy.active || gstate==='intro' || gstate==='gameover' || paused) return;
   if (enemy.hitCooldown   > 0) enemy.hitCooldown   -= dt;
   if (enemy.bounceCooldown > 0) enemy.bounceCooldown -= dt;
 
@@ -696,6 +703,7 @@ function updateEnemy(dt) {
 }
 
 function initGame() {
+  paused=false; document.getElementById('pause-ov').classList.add('hidden');
   score=0; level=1; lives=3; foodNum=1; isDying=false; pendingDir=null;
   resetResidues();
   // Reset to clean XY plane
@@ -868,15 +876,60 @@ const KEY_MAP = {
   ArrowUp:{gx:0,gy:1},    ArrowDown:{gx:0,gy:-1},
   d:{gx:1,gy:0},  a:{gx:-1,gy:0},  w:{gx:0,gy:1},  s:{gx:0,gy:-1},
   D:{gx:1,gy:0},  A:{gx:-1,gy:0},  W:{gx:0,gy:1},  S:{gx:0,gy:-1},
-  // Diagonals: Q/E/Z/C and numpad
+  // Diagonals: Q/E/Z/C
   e:{gx:1,gy:1},   q:{gx:-1,gy:1},  c:{gx:1,gy:-1},  z:{gx:-1,gy:-1},
   E:{gx:1,gy:1},   Q:{gx:-1,gy:1},  C:{gx:1,gy:-1},  Z:{gx:-1,gy:-1},
 };
-document.addEventListener('keydown',e=>{
-  const d=KEY_MAP[e.key];
-  if(d){e.preventDefault();handleDir(d.gx,d.gy);}
-  else if(gstate==='intro') beginGame();
-  else if(gstate==='gameover') retryGame();
+// Numpad directional keys (by e.code, works regardless of NumLock)
+const NUMPAD_MAP = {
+  Numpad6:{gx:1,gy:0},  Numpad4:{gx:-1,gy:0},
+  Numpad8:{gx:0,gy:1},  Numpad2:{gx:0,gy:-1},
+  Numpad9:{gx:1,gy:1},  Numpad7:{gx:-1,gy:1},
+  Numpad3:{gx:1,gy:-1}, Numpad1:{gx:-1,gy:-1},
+};
+
+let paused = false;
+function togglePause() {
+  if (gstate !== 'playing' && gstate !== 'transition') return;
+  paused = !paused;
+  document.getElementById('pause-ov').classList.toggle('hidden', !paused);
+  if (paused) {
+    clearInterval(gameInterval);
+  } else {
+    if (gstate === 'playing') {
+      clearInterval(gameInterval);
+      gameInterval = setInterval(tick, speed);
+    }
+  }
+}
+
+function quitToIntro() {
+  paused = false;
+  clearInterval(gameInterval);
+  isDying = false;
+  gstate = 'intro';
+  document.getElementById('pause-ov').classList.add('hidden');
+  document.getElementById('ov-go').classList.add('hidden');
+  document.getElementById('ov-intro').classList.remove('hidden');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Escape') {
+    e.preventDefault();
+    if (gstate !== 'intro') quitToIntro();
+    return;
+  }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (gstate === 'intro') { beginGame(); return; }
+    if (gstate === 'gameover') { retryGame(); return; }
+    togglePause(); return;
+  }
+  if (paused) return;
+  const d = KEY_MAP[e.key] || NUMPAD_MAP[e.code];
+  if (d) { e.preventDefault(); handleDir(d.gx, d.gy); }
+  else if (gstate === 'intro') beginGame();
+  else if (gstate === 'gameover') retryGame();
 });
 
 // All 8 d-pad buttons: cardinal + diagonal corners
