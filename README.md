@@ -10,7 +10,7 @@ Single file. No build step. No framework. Runs in any modern browser.
 
 Open `nibbles3d.html` directly in a browser. No server required.
 
-**[Live demo →](#)** *(update with your hosted URL)*
+**[Live demo →](https://autocosm.github.io/nibbles-3d/)**
 
 ---
 
