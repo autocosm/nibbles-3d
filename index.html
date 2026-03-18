@@ -283,10 +283,11 @@ for (let i=0; i<POOL; i++) {
     emissive: i===0 ? 0x00ddcc : 0x002211,
     emissiveIntensity: i===0 ? 1.3 : 0.3,
     shininess: i===0 ? 500 : 100,
+    transparent: true, opacity: 1,
   });
   const seg = new THREE.Mesh(segGeo, mat); seg.visible=false; scene.add(seg); segPool.push(seg);
 
-  const cyl = new THREE.Mesh(cylGeo, new THREE.MeshPhongMaterial({color:0x008866,emissive:0x001a0d,shininess:55}));
+  const cyl = new THREE.Mesh(cylGeo, new THREE.MeshPhongMaterial({color:0x008866,emissive:0x001a0d,shininess:55,transparent:true,opacity:1}));
   cyl.visible=false; scene.add(cyl); cylPool.push(cyl);
 }
 
@@ -383,6 +384,16 @@ for (let i=0;i<RESIDUE_POOL;i++){
 
 const _vup = new THREE.Vector3(0,1,0);
 const _qt  = new THREE.Quaternion();
+const _rel = new THREE.Vector3(); // scratch vector — avoids allocation in hot paths
+
+// Returns true if pos lies within the active play plane (within half a cell of the
+// surface and inside the grid boundary). Used to visually distinguish collidable
+// vs non-collidable snake body segments and residues.
+function isOnActivePlane(pos) {
+  _rel.copy(pos).sub(planeOrigin);
+  if (Math.abs(_rel.dot(planeNormal)) > 0.5) return false;
+  return Math.abs(_rel.dot(planeU)) <= BOX && Math.abs(_rel.dot(planeV)) <= BOX;
+}
 
 function refreshSnake(hide=false) {
   const len = snake.length;
@@ -395,12 +406,23 @@ function refreshSnake(hide=false) {
         segPool[i].material.emissive.setHex(0x00ddcc);
         segPool[i].material.emissiveIntensity = 1.3;
         segPool[i].material.shininess = 500;
+        segPool[i].material.opacity = 1;
       } else {
         const t = 1 - i/Math.max(len,1);
-        segPool[i].material.color.setRGB(0, t*.8+.1, t*.55+.18);
-        segPool[i].material.emissive.setHex(0x002211);
-        segPool[i].material.emissiveIntensity = .1 + t*.22;
-        segPool[i].material.shininess = 80;
+        if (isOnActivePlane(snake[i])) {
+          segPool[i].material.color.setRGB(0, t*.8+.1, t*.55+.18);
+          segPool[i].material.emissive.setHex(0x002211);
+          segPool[i].material.emissiveIntensity = .1 + t*.22;
+          segPool[i].material.shininess = 80;
+          segPool[i].material.opacity = 1;
+        } else {
+          // Off-plane: ghosted — dim gray-green tint, mostly transparent
+          segPool[i].material.color.setRGB(t*.10, t*.15, t*.13);
+          segPool[i].material.emissive.setHex(0x000000);
+          segPool[i].material.emissiveIntensity = 0;
+          segPool[i].material.shininess = 10;
+          segPool[i].material.opacity = 0.18;
+        }
       }
     } else { segPool[i].visible = false; }
 
@@ -414,6 +436,9 @@ function refreshSnake(hide=false) {
       _qt.setFromUnitVectors(_vup, diff.normalize());
       cylPool[i].quaternion.copy(_qt);
       cylPool[i].visible = true;
+      const cylOnPlane = isOnActivePlane(a) && isOnActivePlane(b);
+      cylPool[i].material.color.setHex(cylOnPlane ? 0x008866 : 0x0d1a14);
+      cylPool[i].material.opacity = cylOnPlane ? 1.0 : 0.14;
     } else { cylPool[i].visible = false; }
   }
   if (snake.length>0) headLight.position.copy(snake[0]);
@@ -595,6 +620,21 @@ function resetResidues() {
   for (const r of residues) residuePool[r.idx].visible = false;
   residues = [];
   residueHead = 0;
+}
+
+// Update residue mesh opacity each frame: bright on the active plane, ghosted off it.
+function updateResidueVisuals() {
+  for (const r of residues) {
+    const m = residuePool[r.idx];
+    if (!m.visible) continue;
+    if (isOnActivePlane(r.pos)) {
+      m.material.opacity = 0.82;
+      m.material.emissiveIntensity = 0.7;
+    } else {
+      m.material.opacity = 0.10;
+      m.material.emissiveIntensity = 0.05;
+    }
+  }
 }
 
 // Remove residues within SAFE_R world units of the respawn center so the
@@ -1067,6 +1107,7 @@ function animate() {
 
   // Enemy + residues
   updateEnemy(dt);
+  updateResidueVisuals();
 
   // VFX ring bursts
   updateVFX(now);
