@@ -94,7 +94,8 @@ The binding FOV axis (vertical on landscape, horizontal on portrait) is detected
 | `POOL` | `400` | Pre-allocated snake segment + cylinder meshes |
 | `RESIDUE_POOL` | `350` | Pre-allocated residue sphere meshes (circular buffer) |
 | `MARGIN` | `2` | Food placement inner border (cells from edge) |
-| `ENEMY_SPD_FRAC` | `0.88` | Enemy speed as fraction of snake's current step rate |
+| `ENEMY_SPD_FRAC` | `0.88` | Enemy base speed as fraction of snake's current step rate |
+| `ENEMY_LVL_SCALE` | `0.20` | Additional enemy speed multiplier per level above 1 |
 | `R_HIT` | `0.52` | Enemy → residue collision radius (world units) |
 | `S_HIT` | `0.50` | Enemy → snake segment collision radius (world units) |
 | `HEAD_R_HIT` | `0.46` | Snake head → residue death radius (world units) |
@@ -170,7 +171,13 @@ enemy = {
 
 ### Speed
 
-Speed is set dynamically to `(1000 / speed) * ENEMY_SPD_FRAC` — 88% of the snake's current step rate in world-units/second. Recalculated each frame so the enemy always accelerates in lockstep when the snake speeds up.
+Speed is computed by `enemyTargetSpd()`:
+
+```js
+(1000 / speed) * ENEMY_SPD_FRAC * (1 + (level - 1) * ENEMY_LVL_SCALE)
+```
+
+This is 88% of the snake's current step rate, scaled by an additional 20% per level above 1. The level multiplier compounds faster than the player's starting-speed bonus (`−20ms/level ≈ 9–14% per level`), so the enemy gains ground on the player with each level. Recalculated every frame so the enemy also accelerates in lockstep as the snake speeds up within a level.
 
 ### Bounce Stability — `bounceCooldown`
 

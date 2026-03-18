@@ -154,6 +154,7 @@ const POOL         = 400;
 const BOX          = HALF + 0.5;     // enemy bounding box half-extent = 9.5 (relative to planeOrigin)
 const RESIDUE_POOL = 350;            // max residue spheres
 const ENEMY_SPD_FRAC = 0.88;         // enemy speed as fraction of snake's current step-rate
+const ENEMY_LVL_SCALE = 0.20;        // additional enemy speed multiplier gained per level above 1
 const R_HIT        = 0.52;           // enemy→residue collision radius
 const S_HIT        = 0.50;           // enemy→snake segment collision radius
 const HEAD_R_HIT   = 0.46;           // snake head→residue death radius
@@ -595,6 +596,19 @@ function resetResidues() {
   residueHead = 0;
 }
 
+// Remove residues within SAFE_R world units of the respawn center so the
+// player never spawns on or immediately beside a hazard blob.
+const SPAWN_SAFE_R = 4.5;
+function clearSpawnArea() {
+  const center = g2w(HALF, HALF); // always planeOrigin
+  for (let i = residues.length - 1; i >= 0; i--) {
+    if (center.distanceTo(residues[i].pos) < SPAWN_SAFE_R) {
+      residuePool[residues[i].idx].visible = false;
+      residues.splice(i, 1);
+    }
+  }
+}
+
 function addResidue(pos) {
   const idx = residueHead % RESIDUE_POOL;
   residueHead++;
@@ -626,13 +640,19 @@ function initEnemy() {
   enemy.eu=eu; enemy.ev=ev;
 
   // Diagonal velocity: always non-zero on both u and v axes
-  const spd   = (1000 / speed) * ENEMY_SPD_FRAC;
+  const spd   = enemyTargetSpd();
   const angle = Math.PI/4 + Math.floor(Math.random()*4)*(Math.PI/2) + (Math.random()-.5)*0.4;
   enemy.vu = Math.cos(angle) * spd;
   enemy.vv = Math.sin(angle) * spd;
   enemy.active=true; enemy.hitCooldown=0; enemy.bounceCooldown=0;
   trailHistory.length=0;
   enemyMesh.visible=true; enemyGlowMesh.visible=true; enemyLight.visible=true;
+}
+
+// Enemy speed target: tracks snake's step rate × base fraction × per-level multiplier.
+// The level multiplier grows faster than the player's starting-speed bonus each level.
+function enemyTargetSpd() {
+  return (1000 / speed) * ENEMY_SPD_FRAC * (1 + (level - 1) * ENEMY_LVL_SCALE);
 }
 
 // Compute enemy world position from current plane state + stored (eu, ev)
@@ -648,8 +668,8 @@ function updateEnemy(dt) {
   if (enemy.hitCooldown   > 0) enemy.hitCooldown   -= dt;
   if (enemy.bounceCooldown > 0) enemy.bounceCooldown -= dt;
 
-  // Keep speed in sync with snake's current tick rate
-  const targetSpd = (1000 / speed) * ENEMY_SPD_FRAC;
+  // Keep speed in sync with snake's current tick rate (plus level multiplier)
+  const targetSpd = enemyTargetSpd();
   const curSpd    = Math.hypot(enemy.vu, enemy.vv);
   if (Math.abs(curSpd - targetSpd) > 0.1 && curSpd > 0.001) {
     const s = targetSpd / curSpd;
@@ -878,7 +898,8 @@ function die() {
     if (fl>=8) {
       clearInterval(fi); lives--; isDying=false; updateHUD();
       if (lives<=0) { showGO(); return; }
-      // Respawn: reset snake on current plane, keep plane orientation + residues
+      // Respawn: clear hazards near spawn point, reset snake on current plane
+      clearSpawnArea();
       headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0}; pendingDir=null;
       snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
       placeFood();
