@@ -590,7 +590,7 @@ function randomPlane() {
 // ─── GAME STATE ───
 let snake=[]; // array of THREE.Vector3 (world positions, all previous planes included)
 let headGX=HALF, headGY=HALF;
-let dir={gx:1,gy:0}, nextDir={gx:1,gy:0};
+let dir={gx:1,gy:0}, inputQueue=[];
 let pendingDir = null;
 let score=0, level=1, lives=3, foodNum=1, speed=220;
 let rotatedFoods = new Set(); // tracks which rotation-trigger foods (3,5,7) have fired this level
@@ -836,12 +836,12 @@ function updateEnemy(dt) {
 
 function initGame() {
   paused=false; document.getElementById('pause-ov').classList.add('hidden');
-  score=0; level=1; lives=3; foodNum=1; isDying=false; pendingDir=null; rotatedFoods=new Set(); foodStreak=0;
+  score=0; level=1; lives=3; foodNum=1; isDying=false; inputQueue=[]; pendingDir=null; rotatedFoods=new Set(); foodStreak=0;
   resetResidues();
   // Reset to clean XY plane
   planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
   snake = [g2w(HALF,HALF), g2w(HALF-1,HALF), g2w(HALF-2,HALF)];
-  headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0};
+  headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; inputQueue=[];
   speed=220;
   placeFood(); makeFoodSprite(foodNum);
   rebuildGrid();
@@ -856,7 +856,7 @@ function initGame() {
 
 function tick() {
   if (gstate!=='playing') return;
-  dir={...nextDir};
+  if (inputQueue.length > 0) dir = inputQueue.shift();
   const nGX=headGX+dir.gx, nGY=headGY+dir.gy;
 
   // Wall collision
@@ -938,7 +938,7 @@ function doChangePlane() {
     opts.sort((a,b)=>b.s-a.s);
     newDir=opts[0].d;
   }
-  dir=newDir; nextDir=newDir;
+  dir=newDir; inputQueue=[];
 
   placeFood(); makeFoodSprite(foodNum);
   rebuildGrid();
@@ -947,7 +947,7 @@ function doChangePlane() {
 }
 
 function onTransitionComplete() {
-  if (pendingDir) { nextDir=pendingDir; pendingDir=null; }
+  if (pendingDir) { inputQueue=[pendingDir]; pendingDir=null; }
   gstate='playing';
   clearInterval(gameInterval);
   gameInterval=setInterval(tick,speed);
@@ -966,7 +966,7 @@ function die() {
       if (lives<=0) { showGO(); return; }
       // Respawn: clear hazards near spawn point, reset snake on current plane
       clearSpawnArea();
-      headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0}; pendingDir=null;
+      headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; inputQueue=[]; pendingDir=null;
       snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
       placeFood();
       gstate='playing'; clearInterval(gameInterval); gameInterval=setInterval(tick,speed);
@@ -983,7 +983,7 @@ function levelUp() {
     resetResidues();
     planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
     snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
-    headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0}; pendingDir=null;
+    headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; inputQueue=[]; pendingDir=null;
     foodNum=1; speed=Math.max(70,220-(level-1)*20); rotatedFoods=new Set();
     placeFood(); makeFoodSprite(foodNum);
     rebuildGrid(); snapCameraToPlane();
@@ -1007,11 +1007,12 @@ function handleDir(gx, gy) {
   if (gstate==='intro') { beginGame(); return; }
   if (gstate==='gameover') { retryGame(); return; }
   if (gstate==='dead') return;
-  // No exact U-turn (works for both cardinal and diagonal)
-  if (gx===-dir.gx && gy===-dir.gy) return;
+  // No exact U-turn — check against last queued direction so rapid inputs chain correctly
+  const last = inputQueue.length > 0 ? inputQueue[inputQueue.length-1] : dir;
+  if (gx===-last.gx && gy===-last.gy) return;
   const d={gx,gy};
   if (gstate==='transition') pendingDir=d;
-  else nextDir=d;
+  else if (inputQueue.length < 2) inputQueue.push(d);
 }
 
 const KEY_MAP = {
@@ -1145,7 +1146,7 @@ function animate() {
 // Show a preview snake and food so the 3D isn't blank on load
 planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
 snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF),g2w(HALF-2,HALF-1),g2w(HALF-2,HALF-2)];
-headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; nextDir={gx:1,gy:0};
+headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; inputQueue=[];
 foodGX=HALF+4; foodGY=HALF+3;
 foodGroup.position.copy(g2w(foodGX,foodGY)); foodLight.position.copy(foodGroup.position);
 makeFoodSprite(1); rebuildGrid(); snapCameraToPlane(); refreshSnake(); updateHUD();
