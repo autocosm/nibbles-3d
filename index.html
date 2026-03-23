@@ -594,7 +594,7 @@ let dir={gx:1,gy:0}, nextDir={gx:1,gy:0};
 let pendingDir = null;
 let score=0, level=1, lives=3, foodNum=1, speed=220;
 let rotatedFoods = new Set(); // tracks which rotation-trigger foods (3,5,7) have fired this level
-let foodStreak = 0; // consecutive food pickups without dying; grants a life at 12 (if lives < 3)
+let foodStreak = 0; // consecutive food pickups without dying; grants a life at 10 (if lives < 4)
 let gstate='intro'; // intro | playing | transition | dead | gameover
 let gameInterval=null;
 let isDying=false;
@@ -893,7 +893,7 @@ function tick() {
     gameInterval = setInterval(tick, speed);
     foodNum = foodNum>=9 ? 1 : foodNum+1;
     foodStreak++;
-    if (foodStreak >= 12 && lives < 3) { lives++; foodStreak=0; triggerLifeGainVFX(); }
+    if (foodStreak >= 10 && lives < 4) { lives++; foodStreak=0; triggerLifeGainVFX(); }
     if (foodNum===1) { levelUp(); return; }
     if ([3,5,7].includes(n) && !rotatedFoods.has(n)) {
       rotatedFoods.add(n);
