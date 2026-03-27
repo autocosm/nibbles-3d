@@ -162,6 +162,7 @@ html,body { width:100%; height:100%; overflow:hidden; background:#000; font-fami
 const N            = 19;
 const HALF         = (N-1)/2;        // = 9
 const CAM_DUR      = 0.38;           // seconds for camera transition (fast!)
+const SHOWCASE_DUR = 3200;           // ms — level-complete snake showcase before fireworks
 const POOL         = 400;
 const BOX          = HALF + 0.5;     // enemy bounding box half-extent = 9.5 (relative to planeOrigin)
 const RESIDUE_POOL = 350;            // max residue spheres
@@ -195,7 +196,7 @@ addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   // Re-snap camera distance to match new aspect ratio (keeps full grid visible)
-  if (gstate !== 'intro' && !isTransitioning) snapCameraToPlane();
+  if (gstate !== 'intro' && !isTransitioning && gstate !== 'showcase') snapCameraToPlane();
 });
 
 // ─── LIGHTS ───
@@ -421,7 +422,22 @@ function refreshSnake(hide=false) {
         segPool[i].material.opacity = 1;
       } else {
         const t = 1 - i/Math.max(len,1);
-        if (isOnActivePlane(snake[i])) {
+        if (gstate === 'showcase') {
+          // Full solid snake: all segments visible as a 3D sculpture
+          if (isOnActivePlane(snake[i])) {
+            segPool[i].material.color.setRGB(0, t*.8+.1, t*.55+.18);
+            segPool[i].material.emissive.setHex(0x002211);
+            segPool[i].material.emissiveIntensity = .1 + t*.22;
+            segPool[i].material.shininess = 80;
+          } else {
+            // Historical path: blue-purple tint to distinguish from current plane
+            segPool[i].material.color.setRGB(t*.25, t*.20, t*.65+.15);
+            segPool[i].material.emissive.setHex(0x110022);
+            segPool[i].material.emissiveIntensity = .08 + t*.18;
+            segPool[i].material.shininess = 60;
+          }
+          segPool[i].material.opacity = 1;
+        } else if (isOnActivePlane(snake[i])) {
           segPool[i].material.color.setRGB(0, t*.8+.1, t*.55+.18);
           segPool[i].material.emissive.setHex(0x002211);
           segPool[i].material.emissiveIntensity = .1 + t*.22;
@@ -449,8 +465,13 @@ function refreshSnake(hide=false) {
       cylPool[i].quaternion.copy(_qt);
       cylPool[i].visible = true;
       const cylOnPlane = isOnActivePlane(a) && isOnActivePlane(b);
-      cylPool[i].material.color.setHex(cylOnPlane ? 0x008866 : 0x0d1a14);
-      cylPool[i].material.opacity = cylOnPlane ? 1.0 : 0.14;
+      if (gstate === 'showcase') {
+        cylPool[i].material.color.setHex(cylOnPlane ? 0x008866 : 0x221144);
+        cylPool[i].material.opacity = 1.0;
+      } else {
+        cylPool[i].material.color.setHex(cylOnPlane ? 0x008866 : 0x0d1a14);
+        cylPool[i].material.opacity = cylOnPlane ? 1.0 : 0.14;
+      }
     } else { cylPool[i].visible = false; }
   }
   if (snake.length>0) headLight.position.copy(snake[0]);
@@ -528,6 +549,13 @@ let camTgtQuat   = new THREE.Quaternion();
 let camT         = 1;
 let camT0        = 0;
 let isTransitioning = false;
+
+// ─── SHOWCASE STATE ───
+let showcaseT0        = 0;
+const showcaseCenter      = new THREE.Vector3();
+const showcaseCamStartPos = new THREE.Vector3();
+const showcaseCelebPos    = new THREE.Vector3();
+let showcaseFired     = false;
 
 function camQuatForPlane(origin, normal, up) {
   const dist = computeCamDist();
@@ -765,7 +793,7 @@ function enemyWorld() {
 }
 
 function updateEnemy(dt) {
-  if (!enemy.active || gstate==='intro' || gstate==='gameover' || paused) return;
+  if (!enemy.active || gstate==='intro' || gstate==='gameover' || gstate==='showcase' || paused) return;
   if (enemy.hitCooldown   > 0) enemy.hitCooldown   -= dt;
   if (enemy.bounceCooldown > 0) enemy.bounceCooldown -= dt;
 
@@ -1021,21 +1049,87 @@ function die() {
 
 function levelUp() {
   const celebPos = g2w(foodGX, foodGY);
-  levelUpCelebration(celebPos);
-  gstate='dead'; clearInterval(gameInterval);
+  clearInterval(gameInterval);
   level++; score+=level*100; updateHUD();
-  setTimeout(()=>{
-    resetResidues();
-    planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
-    snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
-    headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; inputQueue=[]; pendingDir=null;
-    foodNum=1; speed=Math.max(70,220-(level-1)*20); rotatedFoods=new Set();
-    placeFood(); makeFoodSprite(foodNum);
-    rebuildGrid(); snapCameraToPlane();
-    gstate='playing'; clearInterval(gameInterval); gameInterval=setInterval(tick,speed);
-    refreshSnake();
-    initEnemy();
-  },1000);
+  startShowcase(celebPos);
+}
+
+function doLevelReset() {
+  if (gstate === 'intro' || gstate === 'gameover') return; // user exited during showcase
+  resetResidues();
+  planeOrigin.set(0,0,0); planeU.set(1,0,0); planeV.set(0,1,0); planeNormal.set(0,0,1);
+  snake=[g2w(HALF,HALF),g2w(HALF-1,HALF),g2w(HALF-2,HALF)];
+  headGX=HALF; headGY=HALF; dir={gx:1,gy:0}; inputQueue=[]; pendingDir=null;
+  foodNum=1; speed=Math.max(70,220-(level-1)*20); rotatedFoods=new Set();
+  placeFood(); makeFoodSprite(foodNum);
+  rebuildGrid(); snapCameraToPlane();
+  gstate='playing'; clearInterval(gameInterval); gameInterval=setInterval(tick,speed);
+  refreshSnake();
+  initEnemy();
+}
+
+function startShowcase(celebPos) {
+  gstate = 'showcase';
+  showcaseCelebPos.copy(celebPos);
+
+  // Compute bounding box center of the full snake body in 3D
+  const box = new THREE.Box3();
+  for (const seg of snake) box.expandByPoint(seg);
+  box.getCenter(showcaseCenter);
+
+  showcaseCamStartPos.copy(camera.position);
+  showcaseT0 = performance.now();
+  showcaseFired = false;
+
+  refreshSnake(); // re-draw with full opacity
+}
+
+function tickShowcase(now) {
+  if (gstate !== 'showcase') return;
+  const elapsed = now - showcaseT0;
+  const t = Math.min(1.0, elapsed / SHOWCASE_DUR);
+
+  // Zoom ease: smoothstep over first 30% of duration
+  const zoomProgress = Math.min(1, t / 0.30);
+  const zoomEase = zoomProgress * zoomProgress * (3 - 2 * zoomProgress);
+
+  // Orbit angle: ease-in, up to ~130° over full duration
+  const orbitAngle = t * t * Math.PI * 0.72;
+
+  // Starting direction from showcase center to camera
+  const startDir = showcaseCamStartPos.clone().sub(showcaseCenter);
+  const startDist = startDir.length();
+  startDir.divideScalar(startDist);
+
+  // Target orbit distance: pull back 2.2× from center
+  const orbitDist = startDist * 2.2;
+
+  // Orbit axis: perpendicular to startDir in the horizontal plane
+  const worldUp = new THREE.Vector3(0, 1, 0);
+  let orbitAxis = new THREE.Vector3().crossVectors(startDir, worldUp).normalize();
+  if (orbitAxis.lengthSq() < 0.01) orbitAxis.copy(planeU).normalize();
+  // Blend in a slight upward tilt component for a more dramatic 3D reveal
+  const tiltComponent = new THREE.Vector3().crossVectors(orbitAxis, startDir).normalize();
+  orbitAxis.addScaledVector(tiltComponent, 0.25).normalize();
+
+  // Rotate startDir around the orbit axis
+  const orbitQuat = new THREE.Quaternion().setFromAxisAngle(orbitAxis, orbitAngle);
+  const orbitDir = startDir.clone().applyQuaternion(orbitQuat);
+
+  // Current camera distance (zooming from startDist to orbitDist)
+  const currentDist = startDist + (orbitDist - startDist) * zoomEase;
+
+  // Set camera position and orient to look at showcase center
+  camera.position.copy(showcaseCenter).addScaledVector(orbitDir, currentDist);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(showcaseCenter);
+
+  // At end: fire fireworks then schedule level reset
+  if (elapsed >= SHOWCASE_DUR && !showcaseFired) {
+    showcaseFired = true;
+    levelUpCelebration(showcaseCelebPos);
+    setTimeout(doLevelReset, 1200);
+  }
 }
 
 function showGO() {
@@ -1051,7 +1145,7 @@ function showGO() {
 function handleDir(gx, gy) {
   if (gstate==='intro') { beginGame(); return; }
   if (gstate==='gameover') { retryGame(); return; }
-  if (gstate==='dead') return;
+  if (gstate==='dead' || gstate==='showcase') return;
   // No exact U-turn — check against last queued direction so rapid inputs chain correctly
   const last = inputQueue.length > 0 ? inputQueue[inputQueue.length-1] : dir;
   if (gx===-last.gx && gy===-last.gy) return;
@@ -1169,6 +1263,7 @@ function animate() {
 
   // Camera transition
   tickCamera(now);
+  tickShowcase(now);
 
   // Enemy + residues
   updateEnemy(dt);
